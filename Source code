@@ -1,0 +1,86 @@
+/**
+ * Simple program demonstrating shared memory in POSIX systems.
+ *
+ * In the program, the child process passes a pointer to shared memory, the parent reads the shared memory and calculate the elapsed time.
+ * 
+ * To compile, enter
+ * 	gcc time-shm.c -lrt
+ *
+ * @author Zizeng Li
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <fcntl.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
+/* Variable for operating long digit type from gettimeofday() */
+long second;
+long microsecond;
+
+int main(int argc, char* argv[])
+{
+	/* Give constants for shared memory name and storage*/
+	const int SIZE = 4096;
+	const char *name = "OS";
+
+	int shm_fd;
+	/* Initialize a pointer to point to shared memory later*/
+	struct timeval* ptr;
+	/* A timeval struct for storing end of time later*/
+ 	struct timeval end;
+	/* Initialize a pid_t type variable*/
+	pid_t pid;
+	
+
+	/* create the shared memory segment */
+	shm_fd = shm_open(name, O_CREAT | O_RDWR, 0666);
+
+	/* configure the size of the shared memory segment */
+	ftruncate(shm_fd,SIZE);
+
+	/* now map the shared memory segment in the address space of the process */
+	ptr = mmap(0,SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+	/* Check if map to the shared memory fail*/
+	if (ptr == MAP_FAILED) {
+		printf("Map failed\n");
+		return -1;
+	}
+
+	/* Create a child process*/
+	pid = fork();
+
+	if (pid < 0) { /* error occurred */ 
+		fprintf(stderr, "Fork Failed"); 
+		return 1;
+	}
+	else if (pid == 0) { /* child process */
+		/* Store output of gettimeofday into pointert ptr*/
+		gettimeofday(ptr, NULL);
+		/* execute the program */
+		execlp(argv[1], argv[1], NULL);
+	}
+	else { /* parent process */
+		/* parent will wait for the child to complete */
+		wait(NULL);
+		/* Get the time the program ends*/
+		gettimeofday(&end, NULL);
+		/* Parent process reads the pointer to shared memory*/
+		ptr = mmap(0,SIZE, PROT_READ, MAP_SHARED, shm_fd, 0);
+		/* Calculate the elapsed time */
+		second = end.tv_sec - ptr->tv_sec;
+		microsecond = end.tv_usec - ptr->tv_usec;
+		/* Print the elapsed time*/
+		printf("Second elapsed is %ld, Microsecond elapsed is %ld\n", second, microsecond);
+		printf("Total elapsed is %f\n", second + microsecond*1e-6);
+	}
+
+	return 0;
+}
